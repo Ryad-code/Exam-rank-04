@@ -41,21 +41,23 @@ int nb_segments(char *c, char **tab)
     }
     return count;
 }
-
+//.....................................................................MAIN PATRICK
 int main(int ac , char **av, char **env)
 {
+	char	**cmds;
 	char	**tab;
 	int	last_pipe = -1, j = 0, nb_cmd = 0;
 
 	if (ac < 2)
 		return (1);
 	nb_cmd = nb_segments("|", av + 1);
-	printf("nb_cmd = %d\n", nb_cmd);
+	cmds = sub_tab(av, 1, ac);
+//	printf("nb_cmd = %d\n", nb_cmd);
 	for (int i = 0; i < nb_segments("|", av + 1); i++)
 	{
 		j = 0;
-		printf("next = %d\n", next_occur("|", av, last_pipe + 1));
-		tab = sub_tab(av, last_pipe + 1, next_occur("|", av, last_pipe + 1))	;
+//		printf("next = %d\n", next_occur("|", av, last_pipe + 1));
+		tab = sub_tab(cmds, last_pipe + 1, next_occur("|", cmds, last_pipe + 1))	;
 		while (tab[j])
 		{
 			printf("tab[%d] = %s\n", j, tab[j]);
@@ -63,7 +65,7 @@ int main(int ac , char **av, char **env)
 		}
 	free(tab);
 	tab = NULL;
-	last_pipe = next_occur("|", av, last_pipe + 1);
+	last_pipe = next_occur("|", cmds, last_pipe + 1);
 	}
 	return (0);
 }
