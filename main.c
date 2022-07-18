@@ -5,67 +5,135 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <string.h>
-#define FALSE 0
-#define TRUE 1
 
-int next_occur(char *c, char **tab,  int index)
+#define READ 0
+#define WRITE 1
+
+void    print_error(char *str)
 {
-    while (tab && tab[index] && strcmp(c, tab[index]))
-        index++;
-    return (index);
+	if (str)
+		write(2, str, strlen(str));
 }
 
-char **sub_tab(char **tab, int begin, int end)
+void ft_cd(char **tab)
+{	
+	if (!tab[1] || tab[2])
+		return (print_error("error: cd: bad arguments\n"));
+	if (chdir(tab[1]) == -1)
+	{
+		print_error("error: cd: cannot change directory to ");
+		print_error(tab[1]);
+		print_error("\n");
+	}
+}
+     
+int	count(char *c, char **tab)
 {
-    char **sub;
-    int i = 0;
+	int i = 0;
+	int count = 1;
 
-    if (!(sub = (char **)malloc(sizeof(char *) * (end - begin + 1))))
-        return (NULL);
-    while (begin < end)
-        sub[i++] = tab[begin++];
-    sub[i] = 0;
-    return (sub);
+	while (tab[i])
+	{
+		if (strcmp(c, tab[i]) == 0)
+			count++;
+		i++;
+	}
+	return (count);
 }
 
-int nb_segments(char *c, char **tab)
+int	get_next(char *c, char **tab, int i)
 {
-    int i = 0;
-    int count = 1;
-    if (!tab || !tab[0])
-        return 0;
-    while (tab[i])
-    {
-        if (!strcmp(tab[i++], c))
-            count++;
-    }
-    return count;
+	while (tab && tab[i] && strcmp(c, tab[i]))
+		i++;
+	return (i);
 }
-//.....................................................................MAIN PATRICK
-int main(int ac , char **av, char **env)
+
+char	**get_sub_tab(char **tab,  int begin , int end)
 {
-	char	**cmds;
+	char	**res;
+	int	i = 0;
+
+	res = malloc(sizeof(char *) * (end - begin + 1));
+	while (begin < end)
+	{
+		res[i] = tab[begin];
+		i++;
+		begin++;
+	}
+	res[i] = 0;
+	return (res);
+}
+
+void	execute(char **tab, char **env, int *fd, int last)
+{
+	int pipefd[2];
+	pid_t pid;
+
+	if (strcmp("cd", tab[0]) == 0)
+		return (ft_cd(tab));
+	if (pipe(pipefd) == -1 || (pid = fork()) == -1)
+	{
+		print_error("error: fatal\n");
+		exit(1);
+	}
+	if (pid == 0)
+	{
+		close(pipefd[READ]);
+		dup2(*fd, STDIN_FILENO);
+		if (last == 0)
+			dup2(pipefd[WRITE], STDOUT_FILENO);
+		if (execve(tab[0], tab, env) == -1)
+		{
+			print_error("error: cannot execute ");
+			print_error(tab[0]);
+			print_error("\n");
+		}
+		close(pipefd[WRITE]);
+	}
+	else
+	{
+		close(pipefd[WRITE]);
+		waitpid(pid, NULL, 0);
+		kill(pid, SIGTERM);
+		if (last == 0)
+			dup2(pipefd[READ], *fd);
+		close(pipefd[READ]);
+	}
+
+}
+
+int main(int ac, char **av, char **env)
+{
+	char	**base;
 	char	**tab;
-	int	last_pipe = -1, j = 0, nb_cmd = 0;
+	char	**sub_tab;
+	int	curs_cmd = 0;
+	int	curs_pipe = 0;
+	int	fd = 0;
 
 	if (ac < 2)
 		return (1);
-	nb_cmd = nb_segments("|", av + 1);
-	cmds = sub_tab(av, 1, ac);
-//	printf("nb_cmd = %d\n", nb_cmd);
-	for (int i = 0; i < nb_segments("|", av + 1); i++)
+	base = get_sub_tab(av, 1, ac);								//Tab de base
+	for (int x = 0; x < count(";", base); x++)						//Boucle cmd
 	{
-		j = 0;
-//		printf("next = %d\n", next_occur("|", av, last_pipe + 1));
-		tab = sub_tab(cmds, last_pipe + 1, next_occur("|", cmds, last_pipe + 1))	;
-		while (tab[j])
+		tab = get_sub_tab(base, curs_cmd, get_next(";", base, curs_cmd));		//Tab cmd
+		curs_pipe = 0;
+		for (int y = 0; y < count("|", tab); y++)					//Boucle pipe
 		{
-			printf("tab[%d] = %s\n", j, tab[j]);
-			j++;
+			sub_tab = get_sub_tab(tab, curs_pipe, get_next("|", tab, curs_pipe));	//Tab pipe
+			if (y + 1 < count("|", tab))
+				execute(sub_tab, env, &fd, 0);					//Execute
+			else
+				execute(sub_tab, env, &fd, 1);					//Execute last
+			curs_pipe = get_next("|", tab, curs_pipe) + 1;
+			free(sub_tab);
+			sub_tab = NULL;
 		}
-	free(tab);
-	tab = NULL;
-	last_pipe = next_occur("|", cmds, last_pipe + 1);
+		curs_cmd = get_next(";", base, curs_cmd) + 1;
+		free(tab);
+		tab = NULL;
 	}
+	free(base);
+	base = NULL;
 	return (0);
 }
